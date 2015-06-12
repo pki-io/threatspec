@@ -1,0 +1,29 @@
+
+Model: APIv1
+
+Number of functions covered: 43
+Number of tests covered: 42
+
+Total number of mitigations: 95
+Total number of exposures: 21
+Total number of tests: 91
+
+STRIDE breakdown
+                          Mitigations       Exposures       Factor
+Spoofing                  10                5               0.33
+Tampering                 23                2               0.08
+Repudiation               4                 0               1.00
+Information Disclosure    44                11              0.20
+Denial of Service         4                 3               0.43
+Elevation of Privilege    10                0               1.00
+
+
+Functions without tests:
+ - (db *DB) ResetPassword(customer *customer) error
+
+Exposures:
+  - (api *API) Authenticate(user *User) error
+    - Spoofing: no rate limit
+...
+
+
