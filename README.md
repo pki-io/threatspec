@@ -12,6 +12,8 @@ When a developer writes a new function, no matter how simple, they use comments 
 
 ## Example threat model diagram
 
+![Example threat model diagram](https://raw.githubusercontent.com/pki-io/threatspec/master/threatspec.png)
+
 ## Caution
 
 This is an experimental tool, so your milage may vary. The limitations are:
