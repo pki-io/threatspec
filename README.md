@@ -10,7 +10,21 @@ This tool turns threat modelling on its head, and attempts to tighten the feedba
 
 When a developer writes a new function, no matter how simple, they use comments to bring that function into a threat model context at the same time as they write the code and documentation comments. The developers can start to define mitigations and exposures immediately, and during code review other developers or security engineers can pitch in with suggestions. As the code is written, developers and security engineers can use the ThreatSpec tool to generate an overview report, including a data flow diagram, to identify areas of concern. This is then fed back to the developers and the cycle continues.
 
-## Example threat model diagram
+## Example threat model
+
+A function definition (see simple.go)
+
+    // ThreatSpec SimpleV1 for (*main.Page).save
+    // Exposes WebApp:FileSystem to arbitrary file writes with insufficient path validation
+    // Mitigates WebApp:FileSystem against unauthorised access with strict file permissions
+    // Sends notification email from WebApp:App to User:Mail Client
+
+    func (p *Page) save() error {
+      filename := p.Title + ".txt"
+      return ioutil.WriteFile(filename, p.Body, 0600)
+    }
+
+Diagram for simple.go
 
 ![Example threat model diagram](https://raw.githubusercontent.com/pki-io/threatspec/master/threatspec.png)
 
