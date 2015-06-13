@@ -268,7 +268,7 @@ module ThreatSpec
 
     def parse_graph
       @call_graph = {}
-      #return unless STDIN.tty?
+      return if STDIN.tty?
 
       contents = STDIN.read
 
