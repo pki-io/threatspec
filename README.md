@@ -2,13 +2,13 @@
 
 __An experiment in agile threat modelling__
 
-Traditional software threat modelling can take various forms, but a common approach for software security is to look at the components involved in the application stack, define trust boundaries, and to look at threats and mitigations of those components and how they interact with eachother. Ideally this threat modelling is done before any code is written, and requires architects, developers, operations and security to work together to define the software model and to identify threats. They will typically create a large diagram of how the components relate, systematically work through the treats and track any identified treats using some sort of ticketing system.
+Traditional software threat modelling can take various forms, and a common approach is to look at the components that make up an application stack, define trust boundaries, and to look at threats and mitigations of those components and how they interact with eachother. Typically the threat modelling is done before any code is written, and requires architects, developers, operations and security to work together to define the software model and to identify threats. Together they create a large diagram of how the components relate, and systematically work through the threats and track any identified treats using some sort of ticketing system.
 
-Unfortunately, this approach is more suited to the waterfall development methodology than anything agile. These days, agile organisations often start coding minimum viable products (MVP) to test out an idea. At this stage they might not what exactly which components are required or how they relate, making traditional threat modelling particularly difficult.
+Unfortunately, this approach is more suited to the waterfall development methodology than anything agile. These days, agile organisations often start coding minimum viable products (MVP) to test out an idea. At this stage they might not even know what exactly which components are required or how they relate, making traditional threat modelling particularly difficult.
 
 This tool turns threat modelling on its head, and attempts to tighten the feedback loop between development and security. 
 
-When a developer writes a new function, no matter how simple, they use comments to bring that function into a threat model context at the same time as they write the code and documentation comments. The developers can start to define mitigations and exposures immediately, and during code review other developers or security engineers can pitch in with suggestions. As the code is written, developers and security engineers can use the ThreatSpec tool to generate an overview report, including a data flow diagram, to identify areas of concern. This is then fed back to the developers and the cycle continues.
+When a developer writes a new function, no matter how simple, they use comments to bring that function into a threat model context at the same time as they write the code and other documentation comments. The developers can start to define mitigations and exposures immediately, and during code review other developers or security engineers can pitch in with suggestions. As the code is written, developers and security engineers can use the ThreatSpec tool to generate an overview report, including a component diagram, to identify areas of concern. This is then fed back to the developers and the cycle continues.
 
 ## Example threat model
 
@@ -47,7 +47,7 @@ This is an experimental tool, so your milage may vary. The limitations are:
 
 You and a colleague have had an interesting idea for a new service and have agreed to spend a week testing out the idea by building an MVP. You arrive at work on Monday morning and your colleague points you to the code she hacked together on the train that morning. It has a few bugs so she asks you to take a look while she finishes off another project. You agree and decide that it would be good to start the threat modelling as early as possible.
 
-You pull down the code (simple.go) and fix the bugs. You then run
+You pull down the code (simple.go) and fix the bugs. You then run:
 
     callgraph *.go | ./threatspec.rb *.go && open threatspec.png
 
@@ -62,7 +62,7 @@ to find an empty png and a nearly empty report:
 
     # Components
 
-After looking at the code for a few moments, you realise that it would make sense to map out the components first, before trying to add any mitigations, using a combination of "ThreatSpec" and "Does" comments. The comments for save() looks like:
+After looking at the code for a few moments, you realise that it would make sense to map out the components first, before trying to add any mitigations, using a combination of "ThreatSpec" and "Does" comments for each of the functions. The comments for save() look like:
 
     // ThreatSpec SimpleV1 for (*main.Page).save
     // Does page saving for WebApp:FileSystem
@@ -196,5 +196,56 @@ Finally, you get a message from you colleague asking you to add in an email noti
     ### Threat: privilege escalation
     * Mitigation: non-privileged port (main.main in simple.go:125)
 
-Happy with the progress so far you commit and push your branch for someone to review. You also upload the threat report and diagram, dropping a link in to the WebOps chat room. A few moments later you get an IM from one of the security guys. He loves the threat model and wanted to know how you made it. You explained that it is all code-driven and point him to the branch. He thanks you. After thirty minutes you get another IM from the security guy. He says he's added some comments to your change, so you go to have a look.
+Happy with the progress so far you commit and push your branch for someone to review. You also upload the threat report and diagram, dropping a link in to the WebOps chat room. A few moments later you get an IM from one of the security guys. He loves the threat model and wanted to know how you made it. You explained that it is all code-driven and point him to the branch. He thanks you. After thirty minutes you get another IM from the security guy. He says he's added some comments to your change, so you go to have a look. Six new threats. You fire up your IDE and start coding the mitigations...
+
+## Specification
+
+### ThreatSpec
+
+ThreatSpec MODEL for FUNCTION
+
+Regular expression:
+
+    ^\s*(?:\/\/|\#)\s*ThreatSpec (?<model>.+?) for (?<function>.+?)\s*$
+
+### Mitigation
+
+Mitigates BOUNDARY:COMPONENT against THREAT with MITIGATION (REF)
+
+Regular expression:
+
+    ^\s*(?:\/\/|\#)\s*Mitigates (?<component>.+?) against (?<threat>.+?) with (?<mitigation>.+?)\s*(?:\((?<ref>.*?)\))?\s*$
+
+### Exposure
+
+Exposes BOUNDARY:COMPONENT to THREAT with EXPOSURE (REF)
+
+Regular expression:
+
+    ^\s*(?:\/\/|\#)\s*Exposes (?<component>.+?) to (?<threat>.+?) with (?<exposure>.+?)\s*(?:\((?<ref>.*?)\))?\s*$
+
+### Does action
+
+Does ACTION for BOUNDARY:COMPONENT (REF)
+
+Regular expression:
+
+    ^\s*(?:\/\/|\#)\s*Does (?<action>.+?) for (?<component>.+?)\s*(?:\((?<ref>.*?)\))?\s*$
+
+### Send/receive
+
+Sends/Receives SUBJECT from BOUNDARY:COMPONENT to BOUNDARY:COMPONENT
+
+Regular expression:
+
+    ^\s*(?:\/\/|\#)\s*(?<direction>Sends|Receives) (?<subject>.+?) from (?<from_component>.+?) to (?<to_component>.+?)$
+
+### Test
+
+Tests FUNCTION for THREAT (REF)
+
+Regular expression:
+
+    ^\s*(?:\/\/|\#)\s*Tests (?<function>.+?) for (?<threat>.+?)\s*(?:\((?<ref>.*?)\))?\s*$
+
 ## Contributing
