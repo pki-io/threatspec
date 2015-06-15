@@ -25,7 +25,6 @@ type Page struct {
 }
 
 // ThreatSpec SimpleV1 for (*main.Page).save
-// Does page saving for WebApp:FileSystem
 // Exposes WebApp:FileSystem to arbitrary file writes with insufficient path validation
 // Mitigates WebApp:FileSystem against unauthorised access with strict file permissions
 // Sends notification email from WebApp:App to User:Mail Client
@@ -36,7 +35,6 @@ func (p *Page) save() error {
 }
 
 // ThreatSpec SimpleV1 for main.loadPage
-// Does page loading for WebApp:FileSystem
 // Exposes WebApp:FileSystem to arbitrary file reads with insufficient path validation
 
 func loadPage(title string) (*Page, error) {
@@ -61,7 +59,6 @@ func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
 }
 
 // ThreatSpec SimpleV1 for main.editHandler
-// Does edit handling for WebApp:App
 // Exposes WebApp:App to XSS injection with insufficient input validation
 
 func editHandler(w http.ResponseWriter, r *http.Request, title string) {
@@ -73,7 +70,6 @@ func editHandler(w http.ResponseWriter, r *http.Request, title string) {
 }
 
 // ThreatSpec SimpleV1 for main.saveHandler
-// Does save handling for WebApp:App
 // Exposes WebApp:App to content injection with insufficient input validation
 
 func saveHandler(w http.ResponseWriter, r *http.Request, title string) {
@@ -102,7 +98,6 @@ func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
 var validPath = regexp.MustCompile("^/(edit|save|view)/([a-zA-Z0-9]+)$")
 
 // ThreatSpec SimpleV1 for main.makeHandler
-// Does handler creation for WebApp:Web
 // Mitigates WebApp:Web against resource access abuse with basic input validation
 
 func makeHandler(fn func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
@@ -119,8 +114,8 @@ func makeHandler(fn func(http.ResponseWriter, *http.Request, string)) http.Handl
 // ThreatSpec SimpleV1 for main.main
 // Does network listener for WebApp:Web
 // Does request routing for WebApp:Web
-// Receives http from User:Browser to WebApp:Web
 // Mitigates WebApp:Web against privilege escalation with non-privileged port
+// Receives http from User:Browser to WebApp:Web
 
 func main() {
 	flag.Parse()
