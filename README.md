@@ -196,7 +196,7 @@ Finally, you get a message from you colleague asking you to add in an email noti
     ### Threat: privilege escalation
     * Mitigation: non-privileged port (main.main in simple.go:125)
 
-Happy with the progress so far you commit and push your branch for someone to review. You also upload the threat report and diagram, dropping a link in to the WebOps chat room. A few moments later you get an IM from one of the security guys. He loves the threat model and wanted to know how you made it. You explained that it is all code-driven and point him to the branch. He thanks you. After thirty minutes you get another IM from the security guy. He says he's added some comments to your change, so you go to have a look. Six new threats. You fire up your IDE and start coding the mitigations...
+Happy with the progress so far you commit and push your branch for someone to review. You also upload the threat report and diagram, dropping a link in to the WebOps chat room. A few moments later you get an IM from one of the security guys. He loves the threat model and wanted to know how you made it. You explained that it is all code-driven and point him to the branch. He thanks you. After thirty minutes you get another IM from the security guy. He says he's added some comments to your change, so you go to have a look. Tickets created for six new threats. You fire up your IDE and start coding the first mitigation...
 
 ## Specification
 
