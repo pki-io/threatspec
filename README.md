@@ -41,7 +41,19 @@ This is an experimental tool, so your milage may vary. The limitations are:
 
 ## Installation
 
+You'll need to have Go's callgraph available somewhere in your $PATH.
+
+Just download threatspec.rb and put it in your $PATH.
+
 ## Usage
+
+    callgraph FILES | ./threatspec.rb FILES
+
+For example
+
+    callgraph *.go | ./threatspec.rb *.go
+
+This will write the markdown report to stdout and will create a threatspec.png file.
 
 ## Tutorial
 
