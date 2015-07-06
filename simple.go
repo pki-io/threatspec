@@ -3,6 +3,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// ThreatSpec package main as m
 package main
 
 import (
@@ -24,7 +25,7 @@ type Page struct {
 	Body  []byte
 }
 
-// ThreatSpec SimpleV1 for (*main.Page).save
+// ThreatSpec SimpleV1 for Page.save
 // Does page saving for WebApp:FileSystem
 // Exposes WebApp:FileSystem to arbitrary file writes with insufficient path validation
 // Mitigates WebApp:FileSystem against unauthorised access with strict file permissions
@@ -35,7 +36,7 @@ func (p *Page) save() error {
 	return ioutil.WriteFile(filename, p.Body, 0600)
 }
 
-// ThreatSpec SimpleV1 for main.loadPage
+// ThreatSpec SimpleV1 for loadPage
 // Does page loading for WebApp:FileSystem
 // Exposes WebApp:FileSystem to arbitrary file reads with insufficient path validation
 
@@ -48,7 +49,7 @@ func loadPage(title string) (*Page, error) {
 	return &Page{Title: title, Body: body}, nil
 }
 
-// ThreatSpec SimpleV1 for main.viewHandler
+// ThreatSpec SimpleV1 for viewHandler
 // Does view template rendering for WebApp:App
 
 func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
@@ -60,7 +61,7 @@ func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
 	renderTemplate(w, "view", p)
 }
 
-// ThreatSpec SimpleV1 for main.editHandler
+// ThreatSpec SimpleV1 for editHandler
 // Does edit handling for WebApp:App
 // Exposes WebApp:App to XSS injection with insufficient input validation
 
@@ -72,7 +73,7 @@ func editHandler(w http.ResponseWriter, r *http.Request, title string) {
 	renderTemplate(w, "edit", p)
 }
 
-// ThreatSpec SimpleV1 for main.saveHandler
+// ThreatSpec SimpleV1 for saveHandler
 // Does save handling for WebApp:App
 // Exposes WebApp:App to content injection with insufficient input validation
 
@@ -89,7 +90,7 @@ func saveHandler(w http.ResponseWriter, r *http.Request, title string) {
 
 var templates = template.Must(template.ParseFiles("edit.html", "view.html"))
 
-// ThreatSpec SimpleV1 for main.renderTemplate
+// ThreatSpec SimpleV1 for renderTemplate
 // Does template rendering for WebApp:Web
 
 func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
@@ -101,7 +102,7 @@ func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
 
 var validPath = regexp.MustCompile("^/(edit|save|view)/([a-zA-Z0-9]+)$")
 
-// ThreatSpec SimpleV1 for main.makeHandler
+// ThreatSpec SimpleV1 for makeHandler
 // Does handler creation for WebApp:Web
 // Mitigates WebApp:Web against resource access abuse with basic input validation
 
@@ -116,7 +117,7 @@ func makeHandler(fn func(http.ResponseWriter, *http.Request, string)) http.Handl
 	}
 }
 
-// ThreatSpec SimpleV1 for main.main
+// ThreatSpec SimpleV1 for main
 // Does network listener for WebApp:Web
 // Does request routing for WebApp:Web
 // Receives http from User:Browser to WebApp:Web

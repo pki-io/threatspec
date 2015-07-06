@@ -4,15 +4,17 @@ require 'pp'
 require 'graphviz'
 module ThreatSpec
   
+  PACKAGE_PATTERN = /^\s*(?:\/\/|\#)\s*ThreatSpec package (?<package>.+?)(?: as (?<alias>.+?))?\s*$/
   FUNCTION_PATTERN = /^\s*(?:\/\/|\#)\s*ThreatSpec (?<model>.+?) for (?<function>.+?)\s*$/
   MITIGATION_PATTERN = /^\s*(?:\/\/|\#)\s*Mitigates (?<component>.+?) against (?<threat>.+?) with (?<mitigation>.+?)\s*(?:\((?<ref>.*?)\))?\s*$/
   EXPOSURE_PATTERN = /^\s*(?:\/\/|\#)\s*Exposes (?<component>.+?) to (?<threat>.+?) with (?<exposure>.+?)\s*(?:\((?<ref>.*?)\))?\s*$/
-  DOES_PATTERN = /^\s*(?:\/\/|\#)\s*Does (?<action>.+?) for (?<component>.+?)\s*(?:\((?<ref>.*?)\))?\s*$/
+  DOES_PATTERN = /^\s*(?:\/\/|\#)\s*(?:It|Does|Creates|Returns) (?<action>.+?) for (?<component>.+?)\s*(?:\((?<ref>.*?)\))?\s*$/
   TEST_PATTERN = /^\s*(?:\/\/|\#)\s*Tests (?<function>.+?) for (?<threat>.+?)\s*(?:\((?<ref>.*?)\))?\s*$/
   GO_FUNC_PATTERN = /^\s*func\s+(?<code>(?<function>.+?)\(.*?)\s*{$/
-  GRAPH_PATTERN = /^(?<caller>.+?)\t--(?<dynamic>.+?)-(?<line>\d+):(?<column>\d+)-->\t(?<callee>.+?)$/ 
   ZONE_PATTERN = /^(?<zone>.+?):(?<component>.+?)$/
   SENDRECEIVE_PATTERN = /^\s*(?:\/\/|\#)\s*(?<direction>Sends|Receives) (?<subject>.+?) from (?<from_component>.+?) to (?<to_component>.+?)$/
+  GRAPH_PATTERN = /^(?<caller>.+?)\t--(?<dynamic>.+?)-(?<line>\d+):(?<column>\d+)-->\t(?<callee>.+?)$/ 
+  GRAPH_FUNC_PATTERN = /^\(?\*?(?:(?<path>.+)\/)?(?:(?<package>.+?)\.)?(?<struct>.+?)?\)?\.(?<func>.+?)(?<dynamic>\#\d+)?$/
 
   def self.parse_component(component)
     if match = ZONE_PATTERN.match(component)
@@ -22,9 +24,18 @@ module ThreatSpec
     end
   end
     
+  class Package
+    attr_accessor :package, :package_alias
+    def initialize(package, package_alias, raw)
+      @package = package
+      @package_alias = package_alias
+      @raw = raw
+    end
+  end
+
   class Function
-    attr_accessor :model, :function, :mitigations, :exposures, :does, :sendreceives, :tests, :raw, :code, :file, :line_number
-    def initialize(model, function, raw)
+    attr_accessor :model, :function, :mitigations, :exposures, :does, :sendreceives, :tests, :raw, :code, :file, :line_number, :package
+    def initialize(model, package, function, raw)
       @model = model
       @function = function
       @mitigations = []
@@ -33,6 +44,7 @@ module ThreatSpec
       @sendreceives = []
       @tests = []
       @raw = raw
+      @package = package
     end
   end
 
@@ -90,7 +102,7 @@ module ThreatSpec
   end
 
   class Parser
-    attr_accessor :current_function, :models
+    attr_accessor :current_function, :models, :current_package
 
     def initialize
       @functions = {}
@@ -99,8 +111,12 @@ module ThreatSpec
       @functions_tested = {}
     end
 
+    def parse_package(match, line)
+      @current_package = Package.new(match[:package], match[:alias], line)
+    end
+
     def parse_function(match, line)
-      @current_function = Function.new(match[:model], match[:function], line)
+      @current_function = Function.new(match[:model], @current_package, match[:function], line)
     end
 
     def parse_mitigation(match, line)
@@ -171,26 +187,38 @@ module ThreatSpec
     def parse(file, code)
       @file = file
       @line_number = 1
+      @current_package = nil
+      @function_scope = false
       code.each_line do |line|
         line.chomp!
-        if match = FUNCTION_PATTERN.match(line)
+        if match = PACKAGE_PATTERN.match(line)
+          parse_package(match, line)
+        elsif match = FUNCTION_PATTERN.match(line)
+          @function_scope = true
           parse_function(match, line)
-        elsif match = MITIGATION_PATTERN.match(line)
+        elsif @function_scope && match = MITIGATION_PATTERN.match(line)
           parse_mitigation(match, line)
-        elsif match = EXPOSURE_PATTERN.match(line)
+        elsif @function_scope && match = EXPOSURE_PATTERN.match(line)
           parse_exposure(match, line)
-        elsif match = DOES_PATTERN.match(line)
+        elsif @function_scope && match = DOES_PATTERN.match(line)
           parse_does(match, line)
-        elsif match = SENDRECEIVE_PATTERN.match(line)
+        elsif @function_scope && match = SENDRECEIVE_PATTERN.match(line)
           parse_sendreceive(match, line)
-        elsif match = TEST_PATTERN.match(line)
+        elsif @function_scope && match = TEST_PATTERN.match(line)
           parse_test(match, line)
         elsif match = GO_FUNC_PATTERN.match(line)
           parse_go_function(match, line)
+        else
+          @function_scope = false
         end
         @line_number += 1
         if @current_function
-          @functions[@current_function.function] = @current_function
+          func = @current_function.function
+          raw = @current_function.package ? "#{@current_function.package.package}.#{func}" : func
+          if match = GRAPH_FUNC_PATTERN.match(raw)
+            key = normalize_graph_func(match[:path], match[:package], match[:struct], match[:func])
+          end
+          @functions[key] = @current_function
         end
       end
     end
@@ -266,6 +294,16 @@ module ThreatSpec
       end
     end
 
+    def normalize_graph_func(path, package, struct, func)
+      result = []
+      result << path if path
+      result << package if package
+      result << struct if struct
+      result << func
+
+      result.join(':')
+    end
+
     def parse_graph
       @call_graph = {}
       return if STDIN.tty?
@@ -276,8 +314,18 @@ module ThreatSpec
 
       contents.each_line do |line|
         if match = GRAPH_PATTERN.match(line)
-          caller_name = match[:caller].gsub(/(\$\d+)+/,'')
-          callee_name = match[:callee].gsub(/(\$\d+)+/,'')
+          if caller_match = GRAPH_FUNC_PATTERN.match(match[:caller])
+            caller_name = normalize_graph_func(caller_match[:path], caller_match[:package], caller_match[:struct], caller_match[:func])
+          else
+            next
+          end
+          
+          if callee_match = GRAPH_FUNC_PATTERN.match(match[:callee])
+            callee_name = normalize_graph_func(callee_match[:path], callee_match[:package], callee_match[:struct], callee_match[:func])
+          else
+            next
+          end
+
           @call_graph[caller_name] ||= {}
           @call_graph[caller_name][callee_name] ||= []
           @call_graph[caller_name][callee_name] << { :line => match[:line], :column => match[:column] }
@@ -295,11 +343,13 @@ module ThreatSpec
       sendreceives = []
 
       @functions.each_pair do |caller_name, caller_function|
+        puts "Looking for #{caller_name}"
         caller_function.sendreceives.each do |sr|
           sendreceives << sr
         end
 
         if graph_caller = @call_graph[caller_name]
+          puts "Found #{caller_name}"
           source_components = []
 
           @functions[caller_name].mitigations.each do |x|
@@ -347,9 +397,10 @@ module ThreatSpec
 
               source_components.each do |s|
                 dest_components.each do |d|
+                  callee_label = @functions[callee_name].package ? "#{@functions[callee_name].package.package_alias}.#{@functions[callee_name].function.split('.').last}" : callee_name
                   threat_graph[s] ||= {}
                   threat_graph[s][d] ||= []
-                  threat_graph[s][d] << {:callee => callee_name, :mitigations => @functions[callee_name].mitigations.size, :exposures => @functions[callee_name].exposures.size}
+                  threat_graph[s][d] << {:callee => callee_label, :mitigations => @functions[callee_name].mitigations.size, :exposures => @functions[callee_name].exposures.size}
                 end
               end
             end
@@ -357,7 +408,7 @@ module ThreatSpec
         end
       end
 
-      g = GraphViz.new( :G, :type => :digraph, :rankdir => 'LR', :overlap => 'scalexy', :nodesep => 0.6)
+      g = GraphViz.new( :G, :type => :digraph, :overlap => 'false', :nodesep => 0.6)
       g["compound"] = "true"
       g.edge["lhead"] = ""
       g.edge["ltail"] = ""
@@ -442,6 +493,19 @@ module ThreatSpec
               end
             end
             label << "<font color=\"#{color}\">#{f[:callee]}</font>"
+          end
+
+          if funcs.size >= 3
+            total = 0
+            ne = 0
+            nm = 0
+            funcs.each do |f|
+              total += 1
+              ne += f[:exposures]
+              nm += f[:mitigations]
+            end
+            no = total - ne - nm
+            label = ["<font color=\"red\">#{ne}</font> / <font color=\"darkgreen\">#{nm}</font> / <font color=\"black\">#{no}</font>"]
           end
 
           edge = g.add_edges(nodes[source], nodes[dest], :label => "<"+label.uniq.join("<br/>\n")+">", :color => label_color)
