@@ -343,13 +343,13 @@ module ThreatSpec
       sendreceives = []
 
       @functions.each_pair do |caller_name, caller_function|
-        puts "Looking for #{caller_name}"
+        puts "Looking for caller #{caller_name}"
         caller_function.sendreceives.each do |sr|
           sendreceives << sr
         end
 
         if graph_caller = @call_graph[caller_name]
-          puts "Found #{caller_name}"
+          puts "Found caller #{caller_name}"
           source_components = []
 
           @functions[caller_name].mitigations.each do |x|
@@ -372,7 +372,9 @@ module ThreatSpec
           source_components.uniq!
 
           graph_caller.each_pair do |callee_name, graph|
+            puts "Looking for callee #{callee_name}"
             if @functions.has_key?(callee_name)
+              puts "Found callee #{callee_name}"
               dest_components = []
               mitigations_count = 0
               exposures_count = 0
@@ -397,7 +399,16 @@ module ThreatSpec
 
               source_components.each do |s|
                 dest_components.each do |d|
-                  callee_label = @functions[callee_name].package ? "#{@functions[callee_name].package.package_alias}.#{@functions[callee_name].function.split('.').last}" : callee_name
+                  if @functions[callee_name].package
+                    if @functions[callee_name].package.package_alias
+                      callee_label = "#{@functions[callee_name].package.package_alias}.#{@functions[callee_name].function.split('.').last}"
+                    else
+                      callee_label = "#{@functions[callee_name].package.package}.#{@functions[callee_name].function.split('.').last}"
+                    end
+                  else
+                    callee_name
+                  end
+
                   threat_graph[s] ||= {}
                   threat_graph[s][d] ||= []
                   threat_graph[s][d] << {:callee => callee_label, :mitigations => @functions[callee_name].mitigations.size, :exposures => @functions[callee_name].exposures.size}
@@ -474,20 +485,20 @@ module ThreatSpec
           end
 
           label = []
-          label_color = 'black'
+          edge_color = 'black'
           funcs.each do |f|
             if f[:exposures] > 0
               if f[:mitigations] > 0
                 color = "orange"
-                label_color = "orange" unless label_color == "red"
+                edge_color = "orange" unless edge_color == "red"
               else
                 color = "red"
-                label_color = "red"
+                edge_color = "red"
               end
             else
               if f[:mitigations] > 0
                 color = "darkgreen"
-                label_color = "darkgreen" if label_color == "black"
+                edge_color = "darkgreen" if edge_color == "black"
               else
                 color = "black"
               end
@@ -508,7 +519,7 @@ module ThreatSpec
             label = ["<font color=\"red\">#{ne}</font> / <font color=\"darkgreen\">#{nm}</font> / <font color=\"black\">#{no}</font>"]
           end
 
-          edge = g.add_edges(nodes[source], nodes[dest], :label => "<"+label.uniq.join("<br/>\n")+">", :color => label_color)
+          edge = g.add_edges(nodes[source], nodes[dest], :label => "<"+label.uniq.join("<br/>\n")+">", :color => edge_color)
         end
       end
 
