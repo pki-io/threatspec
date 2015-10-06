@@ -9,6 +9,7 @@ module ThreatSpec
   MITIGATION_PATTERN = /^\s*(?:\/\/|\#)\s*Mitigates (?<component>.+?) against (?<threat>.+?) with (?<mitigation>.+?)\s*(?:\((?<ref>.*?)\))?\s*$/
   EXPOSURE_PATTERN = /^\s*(?:\/\/|\#)\s*Exposes (?<component>.+?) to (?<threat>.+?) with (?<exposure>.+?)\s*(?:\((?<ref>.*?)\))?\s*$/
   DOES_PATTERN = /^\s*(?:\/\/|\#)\s*(?:It|Does|Creates|Returns) (?<action>.+?) for (?<component>.+?)\s*(?:\((?<ref>.*?)\))?\s*$/
+  CALLS_PATTERN = /^\s*(?:\/\/|\#)\s*(?:Calls) (?<functions>.+?)\s*$/
   TEST_PATTERN = /^\s*(?:\/\/|\#)\s*Tests (?<function>.+?) for (?<threat>.+?)\s*(?:\((?<ref>.*?)\))?\s*$/
   GO_FUNC_PATTERN = /^\s*func\s+(?<code>(?<function>.+?)\(.*?)\s*{$/
   ZONE_PATTERN = /^(?<zone>.+?):(?<component>.+?)$/
@@ -34,13 +35,14 @@ module ThreatSpec
   end
 
   class Function
-    attr_accessor :model, :function, :mitigations, :exposures, :does, :sendreceives, :tests, :raw, :code, :file, :line_number, :package
+    attr_accessor :model, :function, :mitigations, :exposures, :does, :sendreceives, :tests, :raw, :code, :file, :line_number, :package, :callees
     def initialize(model, package, function, raw)
       @model = model
       @function = function
       @mitigations = []
       @exposures = []
       @does = []
+      @callees = []
       @sendreceives = []
       @tests = []
       @raw = raw
@@ -66,6 +68,14 @@ module ThreatSpec
       @threat = threat
       @exposure = exposure
       @ref = ref
+      @raw = raw
+    end
+  end
+
+  class Callee
+    attr_accessor :callee
+    def initialize(callee, raw)
+      @callee = callee
       @raw = raw
     end
   end
@@ -102,13 +112,18 @@ module ThreatSpec
   end
 
   class Parser
-    attr_accessor :current_function, :models, :current_package
+    attr_accessor :current_function, :models, :current_package, :debug
 
     def initialize
       @functions = {}
       @functions_found = {}
       @functions_covered = {}
       @functions_tested = {}
+      @debug = false
+    end
+
+    def log(msg)
+      puts "DEBUG #{msg}" if @debug
     end
 
     def parse_package(match, line)
@@ -126,7 +141,7 @@ module ThreatSpec
         mitigation = Mitigation.new(match[:component], match[:threat], match[:mitigation], match[:ref], line)
         @current_function.mitigations << mitigation
       else
-        puts "Orphaned: #{line}"
+        log "orphaned: #{line}"
       end
     end
 
@@ -137,7 +152,7 @@ module ThreatSpec
         exposure = Exposure.new(match[:component], match[:threat], match[:exposure], match[:ref], line)
         @current_function.exposures << exposure
       else
-        puts "Orphansed: #{line}"
+        log "orphaned: #{line}"
       end
     end
 
@@ -148,8 +163,21 @@ module ThreatSpec
         does = Does.new(match[:action], match[:component], match[:ref], line)
         @current_function.does << does
       else
-        puts "Orphansed: #{line}"
+        log "orphaned: #{line}"
       end
+    end
+
+    def parse_calls(match, line)
+      if @current_function
+        @functions_covered[@current_function] ||= 0
+        @functions_covered[@current_function] += 1
+        match[:functions].split(" ").each do |callee|
+          @current_function.callees << Callee.new(callee.gsub(".", ":"), line)
+        end
+      else
+        log "orphaned: #{line}"
+      end
+
     end
 
     def parse_sendreceive(match, line)
@@ -159,7 +187,7 @@ module ThreatSpec
         sendreceive = SendReceive.new(match[:direction], match[:subject], match[:from_component], match[:to_component], line)
         @current_function.sendreceives << sendreceive
       else
-        puts "Orphansed: #{line}"
+        log "orphaned: #{line}"
       end
     end
 
@@ -170,7 +198,7 @@ module ThreatSpec
         test = Test.new(match[:function], match[:threat], match[:ref], line)
         @current_function.tests << test
       else
-        puts "Orphaned: #{line}"
+        log "orphaned: #{line}"
       end
     end
 
@@ -189,6 +217,9 @@ module ThreatSpec
       @line_number = 1
       @current_package = nil
       @function_scope = false
+
+      log "parsing file #{file}"
+
       code.each_line do |line|
         line.chomp!
         if match = PACKAGE_PATTERN.match(line)
@@ -208,6 +239,8 @@ module ThreatSpec
           parse_test(match, line)
         elsif match = GO_FUNC_PATTERN.match(line)
           parse_go_function(match, line)
+        elsif match = CALLS_PATTERN.match(line)
+          parse_calls(match, line)
         else
           @function_scope = false
         end
@@ -343,55 +376,59 @@ module ThreatSpec
       sendreceives = []
 
       @functions.each_pair do |caller_name, caller_function|
-        puts "Looking for caller #{caller_name}"
+        log "looking for caller #{caller_name}"
         caller_function.sendreceives.each do |sr|
           sendreceives << sr
         end
 
         if graph_caller = @call_graph[caller_name]
-          puts "Found caller #{caller_name}"
+          log "found caller #{caller_name}"
           source_components = []
 
-          @functions[caller_name].mitigations.each do |x|
+          caller_func = @functions[caller_name]
+
+          caller_func.mitigations.each do |x|
             ckey = component_key(x.zone, x.component)
             source_components << ckey
             mitigations[ckey] ||= 0
             mitigations[ckey] += 1
           end
-          @functions[caller_name].exposures.each do |x|
+          caller_func.exposures.each do |x|
             ckey = component_key(x.zone, x.component)
             source_components << ckey
             exposures[ckey] ||= 0
             exposures[ckey] += 1
           end
-          @functions[caller_name].does.each do |x|
+          caller_func.does.each do |x|
             ckey = component_key(x.zone, x.component)
             source_components << ckey
           end
 
           source_components.uniq!
 
-          graph_caller.each_pair do |callee_name, graph|
-            puts "Looking for callee #{callee_name}"
+          ((caller_func.callees.inject({}) { |h,v| h[v.callee] = 1; h}).merge( graph_caller)).each_pair do |callee_name, graph|
+            log "looking for callee #{callee_name} for caller #{caller_name}"
             if @functions.has_key?(callee_name)
-              puts "Found callee #{callee_name}"
+              log "found callee #{callee_name}"
               dest_components = []
               mitigations_count = 0
               exposures_count = 0
 
-              @functions[callee_name].mitigations.each do |x|
+              callee_func = @functions[callee_name]
+
+              callee_func.mitigations.each do |x|
                 ckey = component_key(x.zone, x.component)
                 dest_components << ckey
                 mitigations[ckey] ||= 0
                 mitigations[ckey] += 1
               end
-              @functions[callee_name].exposures.each do |x|
+              callee_func.exposures.each do |x|
                 ckey = component_key(x.zone, x.component)
                 dest_components << ckey
                 exposures[ckey] ||= 0
                 exposures[ckey] += 1
               end
-              @functions[callee_name].does.each do |x|
+              callee_func.does.each do |x|
                 ckey = component_key(x.zone, x.component)
                 dest_components << ckey
               end
@@ -399,11 +436,11 @@ module ThreatSpec
 
               source_components.each do |s|
                 dest_components.each do |d|
-                  if @functions[callee_name].package
-                    if @functions[callee_name].package.package_alias
-                      callee_label = "#{@functions[callee_name].package.package_alias}.#{@functions[callee_name].function.split('.').last}"
+                  if callee_func.package
+                    if callee_func.package.package_alias
+                      callee_label = "#{callee_func.package.package_alias}.#{callee_func.function.split('.').last}"
                     else
-                      callee_label = "#{@functions[callee_name].package.package}.#{@functions[callee_name].function.split('.').last}"
+                      callee_label = "#{callee_func.package.package}.#{callee_func.function.split('.').last}"
                     end
                   else
                     callee_name
@@ -411,7 +448,7 @@ module ThreatSpec
 
                   threat_graph[s] ||= {}
                   threat_graph[s][d] ||= []
-                  threat_graph[s][d] << {:callee => callee_label, :mitigations => @functions[callee_name].mitigations.size, :exposures => @functions[callee_name].exposures.size}
+                  threat_graph[s][d] << {:callee => callee_label, :mitigations => callee_func.mitigations.size, :exposures => callee_func.exposures.size}
                 end
               end
             end
@@ -419,7 +456,7 @@ module ThreatSpec
         end
       end
 
-      g = GraphViz.new( :G, :type => :digraph, :overlap => 'false', :nodesep => 0.6)
+      g = GraphViz.new( :G, :type => :digraph, :overlap => 'false', :nodesep => 0.6, :layout => 'dot', :rankdir => 'LR')
       g["compound"] = "true"
       g.edge["lhead"] = ""
       g.edge["ltail"] = ""
@@ -568,6 +605,7 @@ module ThreatSpec
 end
 
 parser = ThreatSpec::Parser.new
+parser.debug = true
 
 ARGV.each do |file| 
   parser.parse file, File.open(file).read
